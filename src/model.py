@@ -1,4 +1,4 @@
-"""Agent-based model of young-adult migration with rent feedback.
+"""Agent-based model of interstate migration with rent feedback.
 
 Agents are stored as NumPy arrays (one entry per agent) rather than objects,
 which keeps large parameter sweeps fast. Every agent still makes its own
@@ -130,7 +130,10 @@ class MigrationModel:
         np.add.at(flows, (old_loc, new_loc), 1)
 
         pop_new = self._count()
-        self.rent = update_rent(self.rent, pop_old, np.maximum(pop_new, 1), self.p.elasticity)
+        # Floor both populations at 1 so a state that empties out (e.g. under a very large
+        # subsidy elsewhere) does not cause a division by zero in the rent update.
+        self.rent = update_rent(self.rent, np.maximum(pop_old, 1), np.maximum(pop_new, 1),
+                                self.p.elasticity)
 
         self._pop.append(pop_new)
         self._rent.append(self.rent.copy())

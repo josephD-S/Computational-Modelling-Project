@@ -119,3 +119,14 @@ def test_simulated_net_migration_per_1000_sums_to_zero():
     from utils.metrics import simulated_net_migration_per_1000
     h = run(Params(n_agents=2000, n_years=5), toy_initial_state())
     assert abs(simulated_net_migration_per_1000(h, 2000).sum()) < 1e-9
+
+
+def test_rent_stays_finite_when_a_state_empties_out():
+    """A huge subsidy drains the other states completely; rent must remain finite and positive."""
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any divide-by-zero warning fails the test
+        h = run(Params(n_agents=1000, n_years=15, subsidy=500.0, move_fraction=1.0, beta=2.0),
+                toy_initial_state(identical=True))
+    assert (h.population[-1, 1:] == 0).all()  # the other states really did empty
+    assert np.isfinite(h.rent).all() and (h.rent > 0).all()
