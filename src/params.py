@@ -62,3 +62,7 @@ class InitialState:
     @property
     def n_states(self) -> int:
         return len(self.names)
+
+    def index(self, name: str) -> int:
+        """Index of a state by name, e.g. ``initial.index("Ohio")``."""
+        return self.names.index(name)

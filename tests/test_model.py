@@ -106,3 +106,16 @@ def test_invalid_params_rejected():
         Params(elasticity=0)
     with pytest.raises(ValueError):
         Params(move_fraction=1.5)
+
+
+def test_initial_state_index_lookup():
+    init = toy_initial_state()
+    assert init.index("S2") == 2
+    with pytest.raises(ValueError):
+        init.index("Nowhere")
+
+
+def test_simulated_net_migration_per_1000_sums_to_zero():
+    from utils.metrics import simulated_net_migration_per_1000
+    h = run(Params(n_agents=2000, n_years=5), toy_initial_state())
+    assert abs(simulated_net_migration_per_1000(h, 2000).sum()) < 1e-9
