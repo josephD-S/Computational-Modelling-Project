@@ -3,3 +3,7 @@ Rubric_CITS4403_Project-2.pdf
 Project_Proposal_Subsidy_Capitalisation.md
 */__pycache__/
 .pytest_cache
+.env
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
