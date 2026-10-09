@@ -29,16 +29,24 @@ def _check_horizon(ensemble, horizon: int) -> None:
         raise ValueError(f"horizon must be between 0 and {ensemble.population.shape[1] - 1}")
 
 
-def population_gain(treated, control, state: int, horizon: int) -> float:
+def population_gain(treated, control, state: int, horizon: int, relative_to: str = "initial") -> float:
     """Extra population in ``state`` at year ``horizon`` caused by the subsidy.
 
     Mean over seeds of (treated - control), as a fraction of the state's initial
-    population, so 0.10 means +10% of the starting population.
+    population, so 0.10 means +10% of the starting population. With
+    ``relative_to="control"`` it is instead a fraction of the control run's population
+    at ``horizon`` (0.10 = 10% more people than there would have been without the subsidy).
     """
     _check_horizon(treated, horizon)
     _check_horizon(control, horizon)
     diff = treated.population[:, horizon, state].mean() - control.population[:, horizon, state].mean()
-    return float(diff / treated.population[:, 0, state].mean())
+    if relative_to == "initial":
+        base = treated.population[:, 0, state].mean()
+    elif relative_to == "control":
+        base = control.population[:, horizon, state].mean()
+    else:
+        raise ValueError('relative_to must be "initial" or "control"')
+    return float(diff / base)
 
 
 def capitalisation_share(treated, control, state: int, subsidy: float, horizon: int) -> float:
@@ -100,3 +108,18 @@ def annual_move_rate(history: History, n_agents: int) -> float:
     flows = history.flows                      # (T, S, S), flows[t, i, j] = moved i -> j
     movers = flows.sum(axis=(1, 2)) - np.trace(flows, axis1=1, axis2=2)
     return float(movers.mean() / n_agents)
+
+
+def cost_per_extra_resident(treated, control, state: int, subsidy: float, horizon: int) -> float:
+    """Subsidy paid in year ``horizon`` per extra resident it attracted or kept, in $k/yr.
+
+    The subsidy goes to everyone living in ``state``, not only to the extra residents, so this is
+    subsidy * treated population / (treated - control population). Equivalently
+    subsidy / (1 - control/treated): the more of the payments go to people who would have lived
+    there anyway, the more each extra resident costs. ``inf`` if the subsidy added nobody.
+    """
+    _check_horizon(treated, horizon)
+    _check_horizon(control, horizon)
+    t = treated.population[:, horizon, state].mean()
+    extra = t - control.population[:, horizon, state].mean()
+    return float(subsidy * t / extra) if extra > 0 else float("inf")
