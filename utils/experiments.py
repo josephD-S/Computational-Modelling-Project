@@ -7,8 +7,8 @@ import pandas as pd
 
 from src.model import MigrationModel
 from src.params import InitialState, Params
-from utils.metrics import (capitalisation_share, population_gain, population_gain_se,
-                           required_subsidy)
+from utils.metrics import (capitalisation_share, cost_per_extra_resident, population_gain,
+                           population_gain_se, required_subsidy)
 
 
 @dataclass
@@ -31,12 +31,13 @@ def run_ensemble(params: Params, initial: InitialState, n_seeds: int = 20, base_
 
 def required_subsidies_for_targets(params: Params, initial: InitialState, targets, horizon: int,
                                    n_seeds: int = 20, base_seed: int = 0, s_max: float = 30.0,
-                                   tol: float = 0.05) -> dict:
+                                   tol: float = 0.05, relative_to: str = "initial") -> dict:
     """Required subsidy for each target gain, sharing the simulation runs between targets.
 
     Returns {target: smallest subsidy ($k/yr) whose population gain over the no-subsidy run
     at year ``horizon`` reaches the target}. 0.0 means no subsidy is needed; ``inf`` means
     ``s_max`` is not enough. Gains are cached per subsidy so each is simulated only once.
+    ``relative_to`` is passed to ``population_gain`` (initial population or control run).
     """
     state = params.policy_state
     control = run_ensemble(replace(params, subsidy=0.0), initial, n_seeds, base_seed)
@@ -45,7 +46,7 @@ def required_subsidies_for_targets(params: Params, initial: InitialState, target
     def gain_at(s: float) -> float:
         if s not in cache:
             treated = run_ensemble(replace(params, subsidy=s), initial, n_seeds, base_seed)
-            cache[s] = population_gain(treated, control, state, horizon)
+            cache[s] = population_gain(treated, control, state, horizon, relative_to)
         return cache[s]
 
     return {t: required_subsidy(gain_at, t, s_max, tol) for t in targets}
@@ -53,14 +54,14 @@ def required_subsidies_for_targets(params: Params, initial: InitialState, target
 
 def required_subsidy_for_target(params: Params, initial: InitialState, target: float, horizon: int,
                                 n_seeds: int = 20, s_max: float = 30.0, tol: float = 0.05,
-                                base_seed: int = 0) -> float:
+                                base_seed: int = 0, relative_to: str = "initial") -> float:
     """Smallest subsidy ($k/yr) at which the policy state's population gain over the
     no-subsidy run, at year ``horizon``, reaches ``target`` (a fraction of its initial population).
 
     Returns 0.0 if no subsidy is needed and ``inf`` if ``s_max`` is not enough.
     """
     return required_subsidies_for_targets(params, initial, [target], horizon, n_seeds, base_seed,
-                                          s_max, tol)[target]
+                                          s_max, tol, relative_to)[target]
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +119,53 @@ def sensitivity_table(params: Params, initial: InitialState, name: str, values, 
             p = replace(params, **{name: v, "elasticity": eps, "n_years": max(params.n_years, horizon)})
             s = required_subsidy_for_target(p, initial, target, horizon, n_seeds, s_max=s_max)
             rows.append({"parameter": name, "value": v, "elasticity": eps, "s_star": s})
+    return pd.DataFrame(rows)
+
+
+def upturn_check(params: Params, initial: InitialState, cases: dict, elasticities, target: float,
+                 horizon: int, n_seeds: int = 20, s_max: float = 30.0) -> pd.DataFrame:
+    """Required subsidy with the gain measured against the initial population and against the
+    control run, plus the control run's population at ``horizon`` (fraction of initial).
+
+    ``cases`` maps a label to parameter overrides, e.g. {"tie strength 15": {"tie_strength": 15.0}}.
+    Used to check whether the rise of s* at high elasticity comes from the shrinking control.
+    """
+    state = params.policy_state
+    rows = []
+    for label, overrides in cases.items():
+        for eps in elasticities:
+            p = replace(params, **overrides, elasticity=eps, n_years=max(params.n_years, horizon))
+            control = run_ensemble(p, initial, n_seeds)
+            row = {"case": label, "elasticity": eps,
+                   "control_pop": float(control.population[:, horizon, state].mean()
+                                        / control.population[:, 0, state].mean())}
+            for rel in ("initial", "control"):
+                row[f"s_star_{rel}"] = required_subsidy_for_target(p, initial, target, horizon, n_seeds,
+                                                                   s_max=s_max, relative_to=rel)
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def subsidy_cost_table(params: Params, initial: InitialState, required: pd.DataFrame, horizon: int,
+                       n_seeds: int = 20) -> pd.DataFrame:
+    """Cost of the subsidy per extra resident at the required subsidy.
+
+    ``required`` has columns elasticity, target and s_mean (the output of
+    ``required_subsidy_table``). Adds the share of year-``horizon`` payments that go to people who
+    would have lived in the policy state anyway, and the cost per extra resident ($k/yr).
+    """
+    state = params.policy_state
+    rows = []
+    for eps, group in required.groupby("elasticity"):
+        p = replace(params, elasticity=eps, n_years=max(params.n_years, horizon))
+        control = run_ensemble(p, initial, n_seeds)
+        for _, r in group.iterrows():
+            treated = run_ensemble(replace(p, subsidy=r["s_mean"]), initial, n_seeds)
+            t = treated.population[:, horizon, state].mean()
+            rows.append({"elasticity": eps, "target": r["target"], "s_star": r["s_mean"],
+                         "share_paid_anyway": float(control.population[:, horizon, state].mean() / t),
+                         "cost_per_extra_resident": cost_per_extra_resident(treated, control, state,
+                                                                            r["s_mean"], horizon)})
     return pd.DataFrame(rows)
 
 

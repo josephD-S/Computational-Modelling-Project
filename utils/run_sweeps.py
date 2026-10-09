@@ -14,7 +14,7 @@ from pathlib import Path
 from src.params import Params
 from utils.data import load_initial_state
 from utils.experiments import (gain_kappa_grid, load_or_compute, required_subsidy_table,
-                               sensitivity_table)
+                               sensitivity_table, subsidy_cost_table, upturn_check)
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "data" / "results"
@@ -33,6 +33,15 @@ SENSITIVITY = {                       # parameter -> values tried (the default i
     "move_fraction": [0.05, 0.1, 0.2],
 }
 HORIZONS = [10, 20, 40]
+UPTURN_CASES = {                      # settings where s* rose again at high elasticity, plus the default
+    "default": {},
+    "tie strength 15": {"tie_strength": 15.0},
+    "migration cost 6": {"migration_cost": 6.0},
+    "5% reconsider": {"move_fraction": 0.05},
+}
+UPTURN_ELASTICITIES = [1, 2, 4, 8]
+COST_ELASTICITIES = [0.3, 1, 2, 8]
+COST_TARGETS = [0.02, 0.10, 0.20]
 
 
 def compute_all(recompute: bool = False, verbose: bool = True) -> dict:
@@ -54,6 +63,12 @@ def compute_all(recompute: bool = False, verbose: bool = True) -> dict:
     step("sensitivity_horizon", lambda: pd.concat([
         sensitivity_table(base, init, "n_years", [h], SENSITIVITY_ELASTICITIES, SENSITIVITY_TARGET, h, N_SEEDS)
         .assign(parameter="horizon", value=h) for h in HORIZONS], ignore_index=True))
+    step("upturn_check", lambda: upturn_check(base, init, UPTURN_CASES, UPTURN_ELASTICITIES,
+                                              SENSITIVITY_TARGET, HORIZON, N_SEEDS))
+    req = out["required_subsidy"]
+    step("subsidy_cost", lambda: subsidy_cost_table(
+        base, init, req[req["elasticity"].isin(COST_ELASTICITIES) & req["target"].isin(COST_TARGETS)],
+        HORIZON, N_SEEDS))
     return out
 
 

@@ -11,8 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.params import Params
 from utils.data import toy_initial_state
 from utils.experiments import required_subsidy_for_target, run_ensemble
-from utils.metrics import (capitalisation_share, population_gain, required_subsidy,
-                           settling_change)
+from utils.metrics import (capitalisation_share, cost_per_extra_resident, population_gain,
+                           required_subsidy, settling_change)
 
 INIT = toy_initial_state(identical=True)
 BASE = Params(n_agents=2000, n_years=10, policy_state=0, elasticity=1.0)
@@ -106,3 +106,35 @@ def test_load_or_compute_caches(tmp_path):
     assert len(calls) == 1
     load_or_compute(path, compute, recompute=True)
     assert len(calls) == 2
+
+
+def test_gain_relative_to_control_uses_control_population_at_horizon():
+    control = run_ensemble(BASE, INIT, n_seeds=4)
+    treated = run_ensemble(replace(BASE, subsidy=5.0), INIT, n_seeds=4)
+    diff = treated.population[:, 10, 0].mean() - control.population[:, 10, 0].mean()
+    rel = population_gain(treated, control, 0, 10, relative_to="control")
+    assert rel == pytest.approx(diff / control.population[:, 10, 0].mean())
+    with pytest.raises(ValueError):
+        population_gain(treated, control, 0, 10, relative_to="final")
+
+
+def test_cost_per_extra_resident():
+    control = run_ensemble(BASE, INIT, n_seeds=4)
+    treated = run_ensemble(replace(BASE, subsidy=5.0), INIT, n_seeds=4)
+    t, c = treated.population[:, 10, 0].mean(), control.population[:, 10, 0].mean()
+    cost = cost_per_extra_resident(treated, control, 0, 5.0, 10)
+    assert cost == pytest.approx(5.0 * t / (t - c))
+    assert cost > 5.0                      # existing residents are paid too
+    assert cost_per_extra_resident(control, control, 0, 5.0, 10) == float("inf")  # nobody added
+
+
+def test_upturn_check_and_cost_table_columns():
+    import pandas as pd
+    from utils.experiments import subsidy_cost_table, upturn_check
+    kwargs = dict(horizon=10, n_seeds=4)
+    df = upturn_check(BASE, INIT, {"default": {}}, [1.0], target=0.05, s_max=40.0, **kwargs)
+    assert {"control_pop", "s_star_initial", "s_star_control"} <= set(df.columns) and len(df) == 1
+    req = pd.DataFrame({"elasticity": [1.0], "target": [0.05], "s_mean": [3.0]})
+    cost = subsidy_cost_table(BASE, INIT, req, **kwargs)
+    assert 0 < cost["share_paid_anyway"].iloc[0] < 1
+    assert cost["cost_per_extra_resident"].iloc[0] > 3.0
