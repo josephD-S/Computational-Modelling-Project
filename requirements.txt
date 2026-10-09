@@ -5,3 +5,4 @@ scipy
 jupyter
 pytest
 requests
+ipywidgets
