@@ -93,3 +93,10 @@ def population_gain_se(treated, control, state: int, horizon: int) -> float:
     per_seed = (treated.population[:, horizon, state] - control.population[:, horizon, state]) \
         / treated.population[:, 0, state].mean()
     return float(per_seed.std(ddof=1) / np.sqrt(len(per_seed)))
+
+
+def annual_move_rate(history: History, n_agents: int) -> float:
+    """Average share of agents who change state per year over a run."""
+    flows = history.flows                      # (T, S, S), flows[t, i, j] = moved i -> j
+    movers = flows.sum(axis=(1, 2)) - np.trace(flows, axis1=1, axis2=2)
+    return float(movers.mean() / n_agents)

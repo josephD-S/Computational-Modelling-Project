@@ -60,7 +60,11 @@ def plot_required_subsidy(table, save_path=None):
     """Required subsidy against elasticity for each target, with the spread across seed batches."""
     fig, ax = plt.subplots(figsize=(7, 4.2))
     targets = sorted(table["target"].unique())
-    for color, t in zip(SERIES, targets):
+    # Ohio's metro areas span elasticities of about 1.0 to 3.7 (Saiz 2010, Table VI).
+    ax.axvspan(1.02, 3.71, color=GRID, alpha=0.7, lw=0, zorder=0)
+    ax.text(1.9, 0.98, "Ohio metros\n(Saiz 2010)", transform=ax.get_xaxis_transform(), ha="center", va="top",
+            fontsize=7.5, color=INK2)
+    for color, t in zip(_ramp(len(targets)), targets):
         d = table[table["target"] == t].sort_values("elasticity")
         ax.fill_between(d["elasticity"], d["s_min"], d["s_max_batch"], color=color, alpha=0.25, lw=0)
         ax.plot(d["elasticity"], d["s_mean"], "o-", color=color, lw=2, ms=4, label=f"+{t:.0%} target")

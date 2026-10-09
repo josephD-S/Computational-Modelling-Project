@@ -130,3 +130,13 @@ def test_rent_stays_finite_when_a_state_empties_out():
                 toy_initial_state(identical=True))
     assert (h.population[-1, 1:] == 0).all()  # the other states really did empty
     assert np.isfinite(h.rent).all() and (h.rent > 0).all()
+
+
+def test_annual_move_rate_matches_flows_and_zero_when_nobody_reconsiders():
+    from utils.metrics import annual_move_rate
+    p = Params(n_agents=2000, n_years=6, seed=4)
+    h = run(p, toy_initial_state())
+    off_diag = h.flows.sum(axis=(1, 2)) - np.trace(h.flows, axis1=1, axis2=2)
+    assert annual_move_rate(h, 2000) == pytest.approx(off_diag.mean() / 2000)
+    assert 0 < annual_move_rate(h, 2000) <= p.move_fraction
+    assert annual_move_rate(run(replace(p, move_fraction=0.0), toy_initial_state()), 2000) == 0.0
