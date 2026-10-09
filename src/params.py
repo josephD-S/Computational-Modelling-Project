@@ -17,7 +17,8 @@ class Params:
     # --- Manipulated parameters (the four experimental variables) ---
     subsidy: float = 0.0           # annual subsidy ($k) paid to residents of the policy state
     elasticity: float = 1.0        # housing supply elasticity (> 0); high = rent barely responds
-    migration_cost: float = 10.0   # utility penalty ($k-equivalent) for living somewhere new
+    migration_cost: float = 8.0    # utility penalty ($k-equivalent) for living somewhere new; 8 gives
+                                   # a baseline move rate of about 1.6%/yr, matching the CPS (see report/notes.md 6.6)
     tie_strength: float = 5.0      # utility per unit of a state's population share (social ties)
 
     # --- Fixed constants (placeholders until calibrated; justify in the report) ---
