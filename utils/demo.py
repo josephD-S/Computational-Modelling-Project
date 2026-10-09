@@ -228,21 +228,38 @@ def _draw_map(ax, history, initial, t, rent_norm, policy_state, title, n_agents,
                  f"rent ${rent[policy_state]:.1f}k", fontsize=9, loc="left", color=INK)
 
 
-def animate_flows(scenarios, initial: InitialState, path=None, fps=3, seed=0):
-    """Animate one run per scenario, side by side. ``scenarios`` is a list of (title, Params).
+MODES = ("Subsidy vs no subsidy", "Two housing supply cases", "Single scenario")
 
-    On the US map each modelled state is tinted by its rent ($k per year), arrows are the largest
-    yearly flows (thicker means more agents) and the policy state has a dark outline. Without the map
-    file, circles (area = share of agents) mark the states instead.
-    Saves a GIF to ``path`` when given. Returns the matplotlib animation.
-    """
-    runs = [(title, p, MigrationModel(replace(p, seed=seed), initial).run()) for title, p in scenarios]
-    lo = min(h.rent.min() for _, _, h in runs)
-    hi = max(h.rent.max() for _, _, h in runs)
-    norm = Normalize(vmin=lo, vmax=hi)
+
+def scenarios_for_mode(mode: str, base: Params, subsidy: float, elasticity: float, elasticity_b: float):
+    """The (title, Params) pairs to draw for each comparison mode of the flow demo."""
+    if mode == MODES[0]:     # baseline (no subsidy) beside the same scenario with the subsidy
+        return [(f"No subsidy (baseline), elasticity {elasticity:.2f}", replace(base, subsidy=0.0, elasticity=elasticity)),
+                (f"Subsidy ${subsidy:g}k per year, elasticity {elasticity:.2f}",
+                 replace(base, subsidy=subsidy, elasticity=elasticity))]
+    if mode == MODES[1]:     # same subsidy under two different housing supply elasticities
+        return [(f"Subsidy ${subsidy:g}k per year, elasticity {e:.2f}", replace(base, subsidy=subsidy, elasticity=e))
+                for e in (elasticity, elasticity_b)]
+    return [(f"Subsidy ${subsidy:g}k per year, elasticity {elasticity:.2f}",
+             replace(base, subsidy=subsidy, elasticity=elasticity))]
+
+
+def _simulate(scenarios, initial, seed):
+    return [(title, p, MigrationModel(replace(p, seed=seed), initial).run()) for title, p in scenarios]
+
+
+def _map_figure(runs, initial, pyplot=True):
+    """Figure with one map per run and a shared rent colour bar. Returns (fig, update(t), n_years)."""
+    norm = Normalize(vmin=min(h.rent.min() for _, _, h in runs), vmax=max(h.rent.max() for _, _, h in runs))
     n_years = min(p.n_years for _, p, _ in runs)
-
-    fig, axes = plt.subplots(1, len(runs), figsize=(6.6 * len(runs), 4.4), squeeze=False)
+    n = len(runs)
+    size = (9.5, 5.8) if n == 1 else (6.6 * n, 4.4)       # a single map gets a bigger canvas
+    if pyplot:
+        fig, axes = plt.subplots(1, n, figsize=size, squeeze=False)
+    else:
+        fig = Figure(figsize=size)
+        FigureCanvasAgg(fig)
+        axes = fig.subplots(1, n, squeeze=False)
     fig.patch.set_facecolor(SURFACE)
     cbar = fig.colorbar(ScalarMappable(norm=norm, cmap=SEQ), ax=axes.ravel().tolist(), fraction=0.025, pad=0.02)
     cbar.set_label("rent ($k per year)", color=INK2, fontsize=8)
@@ -254,7 +271,95 @@ def animate_flows(scenarios, initial: InitialState, path=None, fps=3, seed=0):
             _draw_map(ax, h, initial, t, norm, p.policy_state, title, p.n_agents)
         return []
 
+    return fig, update, n_years
+
+
+def animate_flows(scenarios, initial: InitialState, path=None, fps=3, seed=0):
+    """Animate one run per scenario, side by side. ``scenarios`` is a list of (title, Params).
+
+    On the US map each modelled state is tinted by its rent ($k per year), arrows are the largest
+    yearly flows (thicker means more agents) and the policy state has a dark outline. Without the map
+    file, circles (area = share of agents) mark the states instead.
+    Saves a GIF to ``path`` when given. Returns the matplotlib animation.
+    """
+    fig, update, n_years = _map_figure(_simulate(scenarios, initial, seed), initial)
     anim = FuncAnimation(fig, update, frames=range(n_years + 1), interval=1000 // fps, blit=False)
     if path:
         anim.save(path, writer=PillowWriter(fps=fps), dpi=80, savefig_kwargs={"facecolor": SURFACE})
     return anim, fig, update
+
+
+def build_flow_demo(initial: InitialState, base: Params = None, dpi: int = 90):
+    """Widgets for exploring the flow maps: comparison mode, parameters, a year slider and Play.
+
+    Pressing "Run simulation" simulates the chosen scenarios (one seed) and pre-renders every year as
+    a PNG, so scrubbing and playing just swap the image in place.
+    """
+    import ipywidgets as w
+
+    base = base or Params(policy_state=initial.index("Ohio"), n_years=20)
+    style = {"description_width": "130px"}
+    wide = w.Layout(width="420px")
+    controls = {
+        "mode": w.Dropdown(options=list(MODES), value=MODES[0], description="compare", style=style, layout=wide),
+        "subsidy": w.FloatSlider(value=5.0, min=0.0, max=12.0, step=0.5, description="subsidy ($k/yr)", style=style, layout=wide),
+        "elasticity": w.FloatLogSlider(value=1.0, base=10, min=np.log10(0.3), max=np.log10(8), step=0.05,
+                                       description="elasticity", style=style, layout=wide),
+        "elasticity_b": w.FloatLogSlider(value=3.0, base=10, min=np.log10(0.3), max=np.log10(8), step=0.05,
+                                         description="elasticity (right)", style=style, layout=wide, disabled=True),
+        "migration_cost": w.FloatSlider(value=base.migration_cost, min=0.0, max=20.0, step=0.5,
+                                        description="migration cost", style=style, layout=wide),
+        "seed": w.IntSlider(value=0, min=0, max=9, description="random seed", style=style, layout=wide),
+    }
+    run = w.Button(description="Run simulation", button_style="primary")
+    status = w.HTML("")
+    year = w.IntSlider(value=0, min=0, max=base.n_years, description="year", disabled=True, layout=w.Layout(width="420px"))
+    # repeat=True makes Play loop (and restart from year 0 even if the slider is on the last year);
+    # the built-in repeat toggle is hidden so there is nothing confusing to click.
+    play = w.Play(value=0, min=0, max=base.n_years, step=1, interval=500, disabled=True,
+                  repeat=True, show_repeat=False)
+    w.jslink((play, "value"), (year, "value"))          # Play drives the slider in the browser
+    image = w.Image(format="png", layout=w.Layout(width="100%", max_width="1000px"))
+    frames = []
+
+    def on_mode(change):
+        controls["elasticity_b"].disabled = change["new"] != MODES[1]
+        controls["elasticity"].description = "elasticity (left)" if change["new"] == MODES[1] else "elasticity"
+
+    controls["mode"].observe(on_mode, names="value")
+
+    def on_year(change):
+        if frames:
+            image.value = frames[min(change["new"], len(frames) - 1)]
+
+    year.observe(on_year, names="value")
+
+    def on_run(_=None):
+        run.disabled = True
+        status.value = "Simulating and drawing the maps (a few seconds)..."
+        c = {k: v.value for k, v in controls.items()}
+        sims = scenarios_for_mode(c["mode"], replace(base, migration_cost=c["migration_cost"]), c["subsidy"],
+                                  c["elasticity"], c["elasticity_b"])
+        fig, update, n_years = _map_figure(_simulate(sims, initial, c["seed"]), initial, pyplot=False)
+        frames.clear()
+        for t in range(n_years + 1):
+            update(t)
+            frames.append(figure_png(fig, dpi=dpi))
+        year.disabled = play.disabled = False
+        play.playing = False
+        year.value = play.value = n_years          # start on the final year; Play loops from year 0, Stop resets to year 0
+        image.value = frames[n_years]
+        status.value = f"Done: {len(sims)} scenario(s), seed {c['seed']}. Drag the year slider, or press Play to loop (Pause or Stop to end)."
+        run.disabled = False
+
+    run.on_click(on_run)
+    on_run()
+    box = w.VBox([*controls.values(), w.HBox([run, status]), w.HBox([play, year]), image])
+    return {"box": box, "controls": controls, "run": run, "year": year, "play": play, "image": image,
+            "frames": frames, "status": status}
+
+
+def flow_demo(initial: InitialState, base: Params = None):
+    """Display the interactive flow maps (see ``build_flow_demo``)."""
+    from IPython.display import display
+    display(build_flow_demo(initial, base)["box"])
