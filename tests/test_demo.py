@@ -71,3 +71,32 @@ def test_demo_widgets_update_one_image_in_place_and_button_answers():
     d["target"].value = 0.05
     d["button"].click()
     assert "Required subsidy" in d["answer"].value and "per year" in d["answer"].value
+
+
+def test_scenarios_for_mode_builds_the_right_comparisons():
+    from utils.demo import MODES, scenarios_for_mode
+    base = Params(**{**BASE.__dict__, "elasticity": 2.0})
+    left, right = scenarios_for_mode(MODES[0], base, subsidy=6.0, elasticity=0.5, elasticity_b=3.0)
+    assert left[1].subsidy == 0.0 and right[1].subsidy == 6.0 and left[1].elasticity == right[1].elasticity == 0.5
+    a, b = scenarios_for_mode(MODES[1], base, subsidy=6.0, elasticity=0.5, elasticity_b=3.0)
+    assert a[1].subsidy == b[1].subsidy == 6.0 and (a[1].elasticity, b[1].elasticity) == (0.5, 3.0)
+    (only,) = scenarios_for_mode(MODES[2], base, subsidy=4.0, elasticity=1.5, elasticity_b=3.0)
+    assert only[1].subsidy == 4.0 and only[1].elasticity == 1.5
+
+
+def test_flow_demo_renders_every_year_and_scrubbing_swaps_the_image():
+    import pytest
+    pytest.importorskip("ipywidgets")
+    from utils.demo import MODES, build_flow_demo
+    base = Params(**{**BASE.__dict__, "n_agents": 500, "n_years": 4})
+    d = build_flow_demo(INIT, base=base, dpi=40)
+    assert len(d["frames"]) == 5 and d["image"].value[:4] == b"\x89PNG"      # rendered at construction
+    two_panel = d["image"].value
+    d["year"].value = 0
+    assert d["image"].value == d["frames"][0] and d["image"].value != two_panel
+    d["controls"]["mode"].value = MODES[2]                                    # single, bigger map
+    d["run"].click()
+    assert len(d["frames"]) == 5 and d["frames"][4] != two_panel
+    assert d["controls"]["elasticity_b"].disabled and d["year"].value == 4
+    assert d["play"].repeat is True and d["play"].show_repeat is False        # Play loops; no confusing toggle
+    assert len(d["box"].children) == 9                                        # 6 controls, button row, play row, one image
