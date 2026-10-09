@@ -11,6 +11,8 @@ unless stated. Parameter values other than the one being varied are the defaults
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from src.params import Params
 from utils.data import load_initial_state
 from utils.experiments import (gain_kappa_grid, load_or_compute, required_subsidy_table,
@@ -56,7 +58,6 @@ def compute_all(recompute: bool = False, verbose: bool = True) -> dict:
 
     step("gain_kappa_grid", lambda: gain_kappa_grid(base, init, ELASTICITIES, SUBSIDIES, HORIZON, N_SEEDS))
     step("required_subsidy", lambda: required_subsidy_table(base, init, ELASTICITIES, TARGETS, HORIZON, N_SEEDS))
-    import pandas as pd
     for name, values in SENSITIVITY.items():
         step(f"sensitivity_{name}", lambda name=name, values=values: sensitivity_table(
             base, init, name, values, SENSITIVITY_ELASTICITIES, SENSITIVITY_TARGET, HORIZON, N_SEEDS))

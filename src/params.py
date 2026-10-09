@@ -18,10 +18,11 @@ class Params:
     subsidy: float = 0.0           # annual subsidy ($k) paid to residents of the policy state
     elasticity: float = 1.0        # housing supply elasticity (> 0); high = rent barely responds
     migration_cost: float = 8.0    # utility penalty ($k-equivalent) for living somewhere new; 8 gives
-                                   # a baseline move rate of about 1.6%/yr, matching the CPS (see report/notes.md 6.6)
+                                   # a baseline move rate of about 1.6%/yr, matching the CPS (notebook section 4.3)
     tie_strength: float = 5.0      # utility per unit of a state's population share (social ties)
 
-    # --- Fixed constants (placeholders until calibrated; justify in the report) ---
+    # --- Fixed settings. move_fraction, beta and skill_sigma are not calibrated; the first two are
+    #     varied in the sensitivity analysis (notebook section 6.3) ---
     policy_state: int = 0          # index of the state offering the subsidy
     n_agents: int = 5000           # size of the simulated agent sample
     n_years: int = 20              # simulation horizon (one step = one year)

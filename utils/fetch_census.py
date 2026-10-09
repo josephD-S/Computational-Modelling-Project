@@ -23,7 +23,7 @@ DATA_DIR = ROOT / "data"
 
 START_YEAR = 2010  # ACS 1-year vintage used for initial conditions
 
-# State FIPS codes. Chosen to contrast growth, rent level and housing supply (see proposal).
+# State FIPS codes. Chosen to contrast population growth, rent level and housing supply.
 STATES = {
     "California": "06", "New York": "36", "Illinois": "17", "Ohio": "39",
     "Texas": "48", "Florida": "12", "Colorado": "08", "North Carolina": "37",
