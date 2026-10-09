@@ -138,3 +138,24 @@ def test_upturn_check_and_cost_table_columns():
     cost = subsidy_cost_table(BASE, INIT, req, **kwargs)
     assert 0 < cost["share_paid_anyway"].iloc[0] < 1
     assert cost["cost_per_extra_resident"].iloc[0] > 3.0
+
+
+def test_load_initial_state_converts_to_thousands(tmp_path):
+    from utils.data import load_initial_state
+    path = tmp_path / "init.csv"
+    path.write_text("state,population,median_rent_annual,median_income\nA,1000,12000,50000\nB,3000,9000,40000\n")
+    init = load_initial_state(path)
+    assert init.names == ("A", "B")
+    assert np.allclose(init.rent, [12.0, 9.0]) and np.allclose(init.wage, [50.0, 40.0])
+
+
+def test_real_data_files_load_and_match():
+    from utils.data import load_initial_state
+    from utils.metrics import observed_net_migration_per_1000
+    root = Path(__file__).resolve().parents[1] / "data"
+    init = load_initial_state(root / "initial_state_2010.csv")
+    assert len(init.names) == 8 and "Ohio" in init.names
+    assert np.all((init.rent > 5) & (init.rent < 20))      # $k/yr, so a unit slip would show
+    obs = observed_net_migration_per_1000(root / "observed_net_migration.csv", init)
+    assert obs.shape == (8,) and np.all(np.isfinite(obs))
+

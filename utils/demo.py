@@ -12,16 +12,15 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.cm import ScalarMappable
+from matplotlib.collections import PolyCollection
 from matplotlib.colors import Normalize
 from matplotlib.patches import FancyArrowPatch
 
 from src.model import MigrationModel
 from src.params import InitialState, Params
+from utils import usmap
 from utils.experiments import required_subsidy_for_target, run_ensemble
 from utils.metrics import capitalisation_share, population_gain
-from matplotlib.collections import PolyCollection
-
-from utils import usmap
 from utils.plots import GRID, INK, INK2, SEQ, SERIES, SURFACE, _style
 
 # Approximate state centres (longitude, latitude) for the map layout.
